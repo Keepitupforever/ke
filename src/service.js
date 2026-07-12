@@ -79,8 +79,20 @@ export function applyPetDecay(pet, nowMs) {
 }
 
 const PET_KEY = 'moments_pet'
+// 兼容旧版单宠物数据：把 pet 迁移进 pets 数组
+function migratePet(obj) {
+  if (!Array.isArray(obj.pets)) {
+    if (obj.pet) obj.pets = [obj.pet]
+    else obj.pets = []
+    delete obj.pet
+  }
+  if (!obj.wallet) obj.wallet = defaultWallet()
+  return obj
+}
 function readPet() {
-  return read(PET_KEY, { wallet: defaultWallet(), pet: null })
+  const obj = read(PET_KEY, { wallet: defaultWallet(), pets: [] })
+  migratePet(obj)
+  return obj
 }
 function writePet(obj) {
   write(PET_KEY, obj)
@@ -100,7 +112,7 @@ export async function getPetState() {
     return data
   }
   const obj = readPet()
-  if (obj.pet) applyPetDecay(obj.pet, Date.now())
+  obj.pets.forEach((p) => applyPetDecay(p, Date.now()))
   writePet(obj)
   return obj
 }
@@ -110,8 +122,8 @@ export async function adoptPet(type, name) {
     return request('/pets/adopt', { method: 'POST', body: { type, name } })
   }
   const obj = readPet()
-  if (obj.pet) throw new Error('已经养了宠物啦')
-  obj.pet = {
+  obj.pets.push({
+    id: uid(),
     type,
     name: (name || '').trim() || '宝贝',
     satiety: 80,
@@ -121,46 +133,59 @@ export async function adoptPet(type, name) {
     adoptedAt: new Date().toISOString(),
     lastDecayAt: new Date().toISOString(),
     lastWateredAt: null,
-  }
+  })
   writePet(obj)
   return obj
 }
 
-export async function feedPet(foodId) {
+export async function feedPet(foodId, petId) {
   if (apiMode) {
-    return request('/pets/feed', { method: 'POST', body: { food: foodId } })
+    return request('/pets/feed', { method: 'POST', body: { food: foodId, petId } })
   }
   const obj = readPet()
-  if (!obj.pet) throw new Error('还没有宠物')
+  const pet = obj.pets.find((p) => p.id === petId)
+  if (!pet) throw new Error('宠物不存在')
   const inv = obj.wallet.inventory
   if (!inv[foodId] || inv[foodId] <= 0) throw new Error('该粮食库存不足，先去兑换吧')
   const food = FOODS.find((f) => f.id === foodId)
   if (!food) throw new Error('未知粮食')
-  applyPetDecay(obj.pet, Date.now())
+  applyPetDecay(pet, Date.now())
   let satiety = food.satiety
   let mood = food.mood
   // 投其所好：喂偏好粮食效果翻倍并额外加分
-  if (food.preferred === obj.pet.type) {
+  if (food.preferred === pet.type) {
     satiety *= 1.5
     mood += 4
   }
-  obj.pet.satiety = clamp(obj.pet.satiety + satiety)
-  obj.pet.mood = clamp(obj.pet.mood + mood)
-  if (obj.pet.health < 40) obj.pet.health = clamp(obj.pet.health + 3)
+  pet.satiety = clamp(pet.satiety + satiety)
+  pet.mood = clamp(pet.mood + mood)
+  if (pet.health < 40) pet.health = clamp(pet.health + 3)
   inv[foodId] -= 1
   writePet(obj)
   return obj
 }
 
-export async function waterPet() {
+export async function waterPet(petId) {
   if (apiMode) {
-    return request('/pets/water', { method: 'POST' })
+    return request('/pets/water', { method: 'POST', body: { petId } })
   }
   const obj = readPet()
-  if (!obj.pet) throw new Error('还没有宠物')
-  applyPetDecay(obj.pet, Date.now())
-  obj.pet.water = clamp(obj.pet.water + 35)
-  obj.pet.lastWateredAt = new Date().toISOString()
+  const pet = obj.pets.find((p) => p.id === petId)
+  if (!pet) throw new Error('宠物不存在')
+  applyPetDecay(pet, Date.now())
+  pet.water = clamp(pet.water + 35)
+  pet.lastWateredAt = new Date().toISOString()
+  writePet(obj)
+  return obj
+}
+
+// 删除宠物（不可逆）
+export async function deletePet(petId) {
+  if (apiMode) {
+    return request('/pets/' + petId, { method: 'DELETE' })
+  }
+  const obj = readPet()
+  obj.pets = obj.pets.filter((p) => p.id !== petId)
   writePet(obj)
   return obj
 }

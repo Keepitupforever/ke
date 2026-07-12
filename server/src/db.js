@@ -33,7 +33,7 @@ function decrypt(str) {
 }
 
 // ---------- 内存状态 ----------
-const state = { users: [], posts: [], post_images: [], likes: [], comments: [], sessions: [], pet: null, wallet: null }
+const state = { users: [], posts: [], post_images: [], likes: [], comments: [], sessions: [], pets: [], pet: null, wallet: null }
 
 function assign(parsed) {
   for (const k of Object.keys(state)) {
@@ -101,3 +101,11 @@ for (const u of SEED_USERS) {
   }
 }
 if (seeded) db.persist()
+
+// 迁移：旧版单宠物数据（pet 对象）并入 pets 数组
+if (db.pet) {
+  if (!Array.isArray(db.pets)) db.pets = []
+  if (!db.pets.find((p) => p.id === db.pet.id)) db.pets.push(db.pet)
+  delete db.pet
+  db.persist()
+}

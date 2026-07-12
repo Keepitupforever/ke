@@ -26,6 +26,15 @@ function ensureWallet() {
   if (typeof db.wallet.coins !== 'number') db.wallet.coins = 0
   if (typeof db.wallet.lastDailyDate !== 'string') db.wallet.lastDailyDate = null
 }
+function ensurePets() {
+  if (!Array.isArray(db.pets)) db.pets = []
+  // 兼容旧版单宠物
+  if (db.pet && !db.pets.find((p) => p.id === db.pet.id)) {
+    db.pets.push(db.pet)
+    delete db.pet
+    db.persist()
+  }
+}
 function todayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -51,16 +60,18 @@ export function applyDecay(pet, nowMs) {
 
 export function getPetState() {
   ensureWallet()
-  if (db.pet) applyDecay(db.pet, Date.now())
+  ensurePets()
+  db.pets.forEach((p) => applyDecay(p, Date.now()))
   db.persist()
-  return { wallet: db.wallet, pet: db.pet }
+  return { wallet: db.wallet, pets: db.pets }
 }
 
 export function adoptPet(type, name) {
   ensureWallet()
-  if (db.pet) fail('已经养了宠物啦')
+  ensurePets()
   if (!PET_TYPES.includes(type)) fail('未知的宠物类型')
-  db.pet = {
+  const pet = {
+    id: db.uid(),
     type,
     name: (name || '').trim() || '宝贝',
     satiety: 80,
@@ -71,41 +82,56 @@ export function adoptPet(type, name) {
     lastDecayAt: new Date().toISOString(),
     lastWateredAt: null,
   }
+  db.pets.push(pet)
   db.persist()
-  return { wallet: db.wallet, pet: db.pet }
+  return { wallet: db.wallet, pets: db.pets, pet }
 }
 
-export function feedPet(foodId) {
+export function feedPet(foodId, petId) {
   ensureWallet()
-  if (!db.pet) fail('还没有宠物')
+  ensurePets()
+  const pet = db.pets.find((p) => p.id === petId)
+  if (!pet) fail('宠物不存在')
   const inv = db.wallet.inventory
   if (!inv[foodId] || inv[foodId] <= 0) fail('该粮食库存不足，先去兑换吧')
   const food = FOODS.find((f) => f.id === foodId)
   if (!food) fail('未知粮食')
-  applyDecay(db.pet, Date.now())
+  applyDecay(pet, Date.now())
   let satiety = food.satiety
   let mood = food.mood
   // 投其所好：偏好粮食效果翻倍并额外加分
-  if (food.preferred === db.pet.type) {
+  if (food.preferred === pet.type) {
     satiety *= 1.5
     mood += 4
   }
-  db.pet.satiety = clamp(db.pet.satiety + satiety)
-  db.pet.mood = clamp(db.pet.mood + mood)
-  if (db.pet.health < 40) db.pet.health = clamp(db.pet.health + 3)
+  pet.satiety = clamp(pet.satiety + satiety)
+  pet.mood = clamp(pet.mood + mood)
+  if (pet.health < 40) pet.health = clamp(pet.health + 3)
   inv[foodId] -= 1
   db.persist()
-  return { wallet: db.wallet, pet: db.pet }
+  return { wallet: db.wallet, pets: db.pets }
 }
 
-export function waterPet() {
+export function waterPet(petId) {
   ensureWallet()
-  if (!db.pet) fail('还没有宠物')
-  applyDecay(db.pet, Date.now())
-  db.pet.water = clamp(db.pet.water + 35)
-  db.pet.lastWateredAt = new Date().toISOString()
+  ensurePets()
+  const pet = db.pets.find((p) => p.id === petId)
+  if (!pet) fail('宠物不存在')
+  applyDecay(pet, Date.now())
+  pet.water = clamp(pet.water + 35)
+  pet.lastWateredAt = new Date().toISOString()
   db.persist()
-  return { wallet: db.wallet, pet: db.pet }
+  return { wallet: db.wallet, pets: db.pets }
+}
+
+// 删除宠物（不可逆）
+export function deletePet(petId) {
+  ensureWallet()
+  ensurePets()
+  if (!db.pets.find((p) => p.id === petId)) fail('宠物不存在', 404)
+  db.pets = db.pets.filter((p) => p.id !== petId)
+  db.persist()
+  return { wallet: db.wallet, pets: db.pets }
 }
 
 export function buyFood(foodId, qty = 1) {
