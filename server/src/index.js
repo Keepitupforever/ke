@@ -11,7 +11,10 @@ import petRoutes from './routes/pets.js'
 import { decryptBuffer } from './crypto.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const UPLOAD_DIR = path.resolve(__dirname, '..', 'uploads')
+// 生产上传目录默认 server/uploads；测试时通过 KE_UPLOAD_DIR 指向独立目录，与生产隔离
+const UPLOAD_DIR = process.env.KE_UPLOAD_DIR
+  ? path.resolve(process.env.KE_UPLOAD_DIR)
+  : path.resolve(__dirname, '..', 'uploads')
 const app = express()
 const PORT = process.env.PORT || 3001
 

@@ -18,9 +18,10 @@ function handle(fn) {
 
 router.get('/', authMiddleware, handle(() => pets.getPetState()))
 router.post('/adopt', authMiddleware, handle((req) => pets.adoptPet(req.body?.type, req.body?.name)))
-router.post('/feed', authMiddleware, handle((req) => pets.feedPet(req.body?.food)))
-router.post('/water', authMiddleware, handle(() => pets.waterPet()))
+router.post('/feed', authMiddleware, handle((req) => pets.feedPet(req.body?.food, req.body?.petId)))
+router.post('/water', authMiddleware, handle((req) => pets.waterPet(req.body?.petId)))
 router.post('/buy', authMiddleware, handle((req) => pets.buyFood(req.body?.food, req.body?.qty)))
 router.post('/daily', authMiddleware, handle(() => pets.claimDaily()))
+router.delete('/:id', authMiddleware, handle((req) => pets.deletePet(req.params.id)))
 
 export default router

@@ -17,7 +17,8 @@ const state = reactive({
   posts: [],
   theme: 'auto', // auto | light | dark
   wallet: { coins: 0, inventory: { carrot: 0, bone: 0, fish: 0, kibble: 0 }, lastDailyDate: null },
-  pet: null, // { type, name, satiety, water, mood, health, ... }
+  pets: [], // 多个宠物：[{ id, type, name, satiety, water, mood, health, ... }]
+  activePetId: null, // 当前选中的宠物
   petLoaded: false,
 })
 
@@ -178,6 +179,7 @@ export const store = {
   waterPet,
   buyFood,
   claimDaily,
+  deletePet,
 }
 
 // ---------- 宠物 / 粮食币 ----------
@@ -185,8 +187,13 @@ async function loadPet() {
   try {
     const data = await api.getPetState()
     if (data?.wallet) state.wallet = data.wallet
-    if (data?.pet) state.pet = data.pet
-    else state.pet = null
+    if (Array.isArray(data?.pets)) {
+      state.pets = data.pets
+      if (state.pets.length && !state.pets.find((p) => p.id === state.activePetId)) {
+        state.activePetId = state.pets[0].id
+      }
+      if (!state.pets.length) state.activePetId = null
+    }
   } catch {
     /* ignore */
   } finally {
@@ -197,28 +204,42 @@ async function loadPet() {
 async function adoptPet(type, name) {
   const data = await api.adoptPet(type, name)
   if (data?.wallet) state.wallet = data.wallet
-  if (data?.pet) state.pet = data.pet
+  if (Array.isArray(data?.pets)) state.pets = data.pets
+  if (data?.pet?.id) state.activePetId = data.pet.id
   return data
 }
 
-async function feedPet(foodId) {
-  const data = await api.feedPet(foodId)
+async function feedPet(foodId, petId) {
+  const data = await api.feedPet(foodId, petId)
   if (data?.wallet) state.wallet = data.wallet
-  if (data?.pet) state.pet = data.pet
+  if (Array.isArray(data?.pets)) state.pets = data.pets
   return data
 }
 
-async function waterPet() {
-  const data = await api.waterPet()
+async function waterPet(petId) {
+  const data = await api.waterPet(petId)
   if (data?.wallet) state.wallet = data.wallet
-  if (data?.pet) state.pet = data.pet
+  if (Array.isArray(data?.pets)) state.pets = data.pets
   return data
 }
 
 async function buyFood(foodId, qty = 1) {
   const data = await api.buyFood(foodId, qty)
   if (data?.wallet) state.wallet = data.wallet
-  if (data?.pet) state.pet = data.pet
+  if (Array.isArray(data?.pets)) state.pets = data.pets
+  return data
+}
+
+// 删除宠物（不可逆）
+async function deletePet(petId) {
+  const data = await api.deletePet(petId)
+  if (data?.wallet) state.wallet = data.wallet
+  if (Array.isArray(data?.pets)) {
+    state.pets = data.pets
+    if (state.activePetId === petId) {
+      state.activePetId = state.pets[0]?.id || null
+    }
+  }
   return data
 }
 

@@ -9,9 +9,25 @@
       <div class="pet-header-title">我们的宠物</div>
     </div>
 
-    <!-- 领养引导 -->
-    <div v-if="store.state.petLoaded && !store.state.pet" class="adopt-card">
-      <div class="adopt-title">还没有宠物，选一只带回家吧 🏡</div>
+    <!-- 宠物切换条 -->
+    <div v-if="store.state.petLoaded && hasPet" class="pet-tabs">
+      <button
+        v-for="p in pets"
+        :key="p.id"
+        class="pet-tab"
+        :class="{ active: activePet && p.id === activePet.id }"
+        @click="selectPet(p.id)"
+      >
+        <span class="pet-tab-emoji">{{ petTypeOf(p).emoji }}</span>
+        <span class="pet-tab-name">{{ p.name }}</span>
+        <span class="pet-tab-del" title="送走" @click.stop="confirmDelete(p)">×</span>
+      </button>
+      <button class="pet-tab add" title="再领养一只" @click="adopting = true">＋</button>
+    </div>
+
+    <!-- 领养 / 再加一只 -->
+    <div v-if="showAdoptPanel" class="adopt-card">
+      <div class="adopt-title">{{ hasPet ? '再领养一只小可爱吧 🐾' : '还没有宠物，选一只带回家吧 🏡' }}</div>
       <div class="adopt-list">
         <button
           v-for="t in PET_TYPES"
@@ -26,17 +42,18 @@
       </div>
       <input v-model="petName" class="adopt-input" maxlength="12" placeholder="给TA起个名字（可留空）" />
       <button class="adopt-btn" :disabled="!selectedType" @click="doAdopt">领养 {{ selectedType ? petTypeLabel : '' }}</button>
+      <div v-if="hasPet" class="adopt-cancel" @click="adopting = false">取消</div>
       <div class="adopt-tip">每天登录、发动态、点赞、评论都能赚粮食币，用来兑换粮食喂养TA～</div>
     </div>
 
     <!-- 宠物主页 -->
-    <template v-else-if="store.state.pet">
+    <template v-else-if="activePet">
       <div class="pet-stage">
         <div class="pet-avatar" :class="petMoodClass">
           <span class="pet-emoji">{{ petEmoji }}</span>
           <span class="pet-shadow" />
         </div>
-        <div class="pet-name">{{ store.state.pet.name }}</div>
+        <div class="pet-name">{{ activePet.name }}</div>
         <div class="pet-type">{{ petTypeName }} · 已陪伴 {{ adoptedDays }} 天</div>
         <div class="pet-status" :class="statusClass">{{ petStatusText }}</div>
       </div>
@@ -48,9 +65,9 @@
           <span class="vital-emoji">{{ v.emoji }}</span>
           <span class="vital-label">{{ v.label }}</span>
           <div class="vital-bar">
-            <div class="vital-fill" :class="vitalColor(store.state.pet[v.key])" :style="{ width: clampPct(store.state.pet[v.key]) }" />
+            <div class="vital-fill" :class="vitalColor(activePet[v.key])" :style="{ width: clampPct(activePet[v.key]) }" />
           </div>
-          <span class="vital-num">{{ Math.round(store.state.pet[v.key]) }}</span>
+          <span class="vital-num">{{ Math.round(activePet[v.key]) }}</span>
         </div>
       </div>
 
@@ -72,7 +89,7 @@
             <span class="feed-emoji">{{ f.emoji }}</span>
             <span class="feed-name">{{ f.name }}</span>
             <span class="feed-count">×{{ store.state.wallet.inventory[f.id] || 0 }}</span>
-            <span v-if="f.preferred === store.state.pet.type" class="feed-fav">最爱</span>
+            <span v-if="f.preferred === activePet.type" class="feed-fav">最爱</span>
           </button>
         </div>
         <div v-if="noFood" class="feed-empty">库存空空，去下面的商店兑换粮食吧～</div>
@@ -89,7 +106,7 @@
                 {{ f.name }}
                 <span v-if="f.preferred" class="shop-pref">{{ petTypeName }}最爱</span>
               </div>
-              <div class="shop-desc">饱食 +{{ f.satiety }}<template v-if="f.preferred === store.state.pet.type">（偏好×1.5）</template> · 心情 +{{ f.mood }}</div>
+              <div class="shop-desc">饱食 +{{ f.satiety }}<template v-if="f.preferred === activePet.type">（偏好×1.5）</template> · 心情 +{{ f.mood }}</div>
             </div>
             <button
               class="shop-buy"
@@ -110,20 +127,45 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { store } from '../store'
 import { PET_TYPES, FOODS, COIN_RULES, VITALS } from '../service'
 
 const selectedType = ref('rabbit')
 const petName = ref('')
+const adopting = ref(false)
+const selectedId = ref(null)
 
-const petType = computed(() => PET_TYPES.find((t) => t.id === store.state.pet?.type))
+const pets = computed(() => store.state.pets || [])
+const hasPet = computed(() => pets.value.length > 0)
+const showAdoptPanel = computed(() => {
+  if (!store.state.petLoaded) return false
+  return !hasPet.value || adopting.value
+})
+
+watch(() => store.state.activePetId, (id) => {
+  if (id) selectedId.value = id
+})
+watch(
+  () => store.state.pets,
+  (list) => {
+    if (!list.find((p) => p.id === selectedId.value)) selectedId.value = list[0]?.id || null
+  },
+  { immediate: true }
+)
+
+const activePet = computed(() => pets.value.find((p) => p.id === selectedId.value) || pets.value[0] || null)
+
+function petTypeOf(p) {
+  return PET_TYPES.find((t) => t.id === p?.type) || {}
+}
+const petType = computed(() => petTypeOf(activePet.value))
 const petEmoji = computed(() => petType.value?.emoji || '🐾')
 const petTypeName = computed(() => petType.value?.name || '宠物')
 const petTypeLabel = computed(() => PET_TYPES.find((t) => t.id === selectedType.value)?.name || '')
 
 const adoptedDays = computed(() => {
-  const since = store.state.pet?.adoptedAt
+  const since = activePet.value?.adoptedAt
   if (!since) return 0
   const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000) + 1
   return days
@@ -142,7 +184,7 @@ function vitalColor(v) {
 
 // 宠物情绪：根据生命体征给出状态文案与动画
 const petStatusText = computed(() => {
-  const p = store.state.pet
+  const p = activePet.value
   if (!p) return ''
   if (p.health < 30) return '身体不太舒服，多喂点东西吧 🤒'
   if (p.satiety < 20) return '肚子饿瘪了，想吃东西 🥺'
@@ -152,38 +194,46 @@ const petStatusText = computed(() => {
   return '一切都挺好，悠闲地待着～'
 })
 const statusClass = computed(() => {
-  const p = store.state.pet
+  const p = activePet.value
   if (!p) return ''
   if (p.health < 30 || p.satiety < 20 || p.water < 20) return 'bad'
   if (p.mood < 30) return 'warn'
   return 'good'
 })
 const petMoodClass = computed(() => {
-  const p = store.state.pet
+  const p = activePet.value
   if (!p) return ''
   if (p.mood >= 70 && p.health >= 50) return 'happy'
   if (p.health < 30 || p.satiety < 20 || p.water < 20) return 'sad'
   return ''
 })
 
+function selectPet(id) {
+  selectedId.value = id
+}
+
 async function doAdopt() {
   if (!selectedType.value) return
   try {
     await store.adoptPet(selectedType.value, petName.value)
+    adopting.value = false
+    petName.value = ''
   } catch (e) {
     alert(e?.message || '领养失败')
   }
 }
 async function doWater() {
+  if (!activePet.value) return
   try {
-    await store.waterPet()
+    await store.waterPet(activePet.value.id)
   } catch (e) {
     alert(e?.message || '喂水失败')
   }
 }
 async function doFeed(foodId) {
+  if (!activePet.value) return
   try {
-    await store.feedPet(foodId)
+    await store.feedPet(foodId, activePet.value.id)
   } catch (e) {
     alert(e?.message || '喂食失败')
   }
@@ -193,6 +243,11 @@ async function doBuy(foodId) {
     await store.buyFood(foodId, 1)
   } catch (e) {
     alert(e?.message || '兑换失败')
+  }
+}
+function confirmDelete(p) {
+  if (confirm(`确定要把「${p.name}」送走吗？此操作不可恢复。`)) {
+    store.deletePet(p.id).catch((e) => alert(e?.message || '删除失败'))
   }
 }
 
@@ -226,6 +281,23 @@ onUnmounted(() => {
 
 .card-title { font-size: var(--fs-base); font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; }
 
+/* 宠物切换条 */
+.pet-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 12px var(--sp-4); background: var(--bg); scrollbar-width: thin; }
+.pet-tab {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 999px; border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer; transition: all 0.15s; position: relative;
+}
+.pet-tab.active { border-color: var(--primary); background: var(--primary-soft); }
+.pet-tab-emoji { font-size: 22px; }
+.pet-tab-name { font-size: var(--fs-sm); color: var(--text); font-weight: 500; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pet-tab-del {
+  margin-left: 2px; width: 18px; height: 18px; border-radius: 50%; line-height: 16px; text-align: center;
+  background: rgba(0,0,0,0.08); color: var(--text-tertiary); font-size: 15px; font-weight: 700; flex: 0 0 auto;
+}
+.pet-tab-del:hover { background: rgba(229,72,77,0.18); color: #e5484d; }
+.pet-tab.add { font-size: 20px; font-weight: 700; color: var(--primary); padding: 6px 14px; }
+
 /* 领养 */
 .adopt-card { margin: var(--sp-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-5); }
 .adopt-title { font-size: var(--fs-md); font-weight: 600; color: var(--text); margin-bottom: 14px; text-align: center; }
@@ -249,6 +321,7 @@ onUnmounted(() => {
 }
 .adopt-btn:disabled { opacity: 0.6; }
 .adopt-btn:active { transform: scale(0.98); }
+.adopt-cancel { text-align: center; margin-top: 10px; font-size: var(--fs-sm); color: var(--text-tertiary); cursor: pointer; }
 .adopt-tip { margin-top: 12px; font-size: var(--fs-sm); color: var(--text-tertiary); line-height: 1.6; text-align: center; }
 
 /* 宠物舞台 */

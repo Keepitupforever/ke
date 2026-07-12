@@ -79,8 +79,21 @@ export function applyPetDecay(pet, nowMs) {
 }
 
 const PET_KEY = 'moments_pet'
+// 兼容旧版单宠物数据：把 pet 迁移进 pets 数组
+function migratePet(obj) {
+  if (!Array.isArray(obj.pets)) {
+    if (obj.pet) obj.pets = [obj.pet]
+    else obj.pets = []
+    delete obj.pet
+  }
+  if (!obj.wallet) obj.wallet = defaultWallet()
+  if (!Array.isArray(obj.rewardedLikes)) obj.rewardedLikes = []
+  return obj
+}
 function readPet() {
-  return read(PET_KEY, { wallet: defaultWallet(), pet: null })
+  const obj = read(PET_KEY, { wallet: defaultWallet(), pets: [], rewardedLikes: [] })
+  migratePet(obj)
+  return obj
 }
 function writePet(obj) {
   write(PET_KEY, obj)
@@ -100,7 +113,7 @@ export async function getPetState() {
     return data
   }
   const obj = readPet()
-  if (obj.pet) applyPetDecay(obj.pet, Date.now())
+  obj.pets.forEach((p) => applyPetDecay(p, Date.now()))
   writePet(obj)
   return obj
 }
@@ -110,8 +123,8 @@ export async function adoptPet(type, name) {
     return request('/pets/adopt', { method: 'POST', body: { type, name } })
   }
   const obj = readPet()
-  if (obj.pet) throw new Error('已经养了宠物啦')
-  obj.pet = {
+  obj.pets.push({
+    id: uid(),
     type,
     name: (name || '').trim() || '宝贝',
     satiety: 80,
@@ -121,46 +134,59 @@ export async function adoptPet(type, name) {
     adoptedAt: new Date().toISOString(),
     lastDecayAt: new Date().toISOString(),
     lastWateredAt: null,
-  }
+  })
   writePet(obj)
   return obj
 }
 
-export async function feedPet(foodId) {
+export async function feedPet(foodId, petId) {
   if (apiMode) {
-    return request('/pets/feed', { method: 'POST', body: { food: foodId } })
+    return request('/pets/feed', { method: 'POST', body: { food: foodId, petId } })
   }
   const obj = readPet()
-  if (!obj.pet) throw new Error('还没有宠物')
+  const pet = obj.pets.find((p) => p.id === petId)
+  if (!pet) throw new Error('宠物不存在')
   const inv = obj.wallet.inventory
   if (!inv[foodId] || inv[foodId] <= 0) throw new Error('该粮食库存不足，先去兑换吧')
   const food = FOODS.find((f) => f.id === foodId)
   if (!food) throw new Error('未知粮食')
-  applyPetDecay(obj.pet, Date.now())
+  applyPetDecay(pet, Date.now())
   let satiety = food.satiety
   let mood = food.mood
   // 投其所好：喂偏好粮食效果翻倍并额外加分
-  if (food.preferred === obj.pet.type) {
+  if (food.preferred === pet.type) {
     satiety *= 1.5
     mood += 4
   }
-  obj.pet.satiety = clamp(obj.pet.satiety + satiety)
-  obj.pet.mood = clamp(obj.pet.mood + mood)
-  if (obj.pet.health < 40) obj.pet.health = clamp(obj.pet.health + 3)
+  pet.satiety = clamp(pet.satiety + satiety)
+  pet.mood = clamp(pet.mood + mood)
+  if (pet.health < 40) pet.health = clamp(pet.health + 3)
   inv[foodId] -= 1
   writePet(obj)
   return obj
 }
 
-export async function waterPet() {
+export async function waterPet(petId) {
   if (apiMode) {
-    return request('/pets/water', { method: 'POST' })
+    return request('/pets/water', { method: 'POST', body: { petId } })
   }
   const obj = readPet()
-  if (!obj.pet) throw new Error('还没有宠物')
-  applyPetDecay(obj.pet, Date.now())
-  obj.pet.water = clamp(obj.pet.water + 35)
-  obj.pet.lastWateredAt = new Date().toISOString()
+  const pet = obj.pets.find((p) => p.id === petId)
+  if (!pet) throw new Error('宠物不存在')
+  applyPetDecay(pet, Date.now())
+  pet.water = clamp(pet.water + 35)
+  pet.lastWateredAt = new Date().toISOString()
+  writePet(obj)
+  return obj
+}
+
+// 删除宠物（不可逆）
+export async function deletePet(petId) {
+  if (apiMode) {
+    return request('/pets/' + petId, { method: 'DELETE' })
+  }
+  const obj = readPet()
+  obj.pets = obj.pets.filter((p) => p.id !== petId)
   writePet(obj)
   return obj
 }
@@ -255,9 +281,11 @@ function buildPost(p) {
   return {
     ...p,
     profiles: { id: p.user_id, display_name: ACCOUNT_NAMES[p.user_id] || '用户', avatar_url: null },
-    likes: likes.filter((l) => l.post_id === p.id).map((l) => ({ id: l.id, user_id: l.user_id })),
+    likes: likes
+      .filter((l) => l.post_id === p.id && !l.deleted_at)
+      .map((l) => ({ id: l.id, user_id: l.user_id })),
     comments: comments
-      .filter((c) => c.post_id === p.id)
+      .filter((c) => c.post_id === p.id && !c.deleted_at)
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
       .map(buildComment),
   }
@@ -315,6 +343,7 @@ export async function getPosts() {
   }
   const posts = read(POSTS_KEY, [])
   return posts
+    .filter((p) => !p.deleted_at)
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .map(buildPost)
 }
@@ -336,12 +365,10 @@ export async function deletePost(postId) {
     await request('/posts/' + postId, { method: 'DELETE' })
     return { error: null }
   }
-  let posts = read(POSTS_KEY, [])
-  posts = posts.filter((p) => p.id !== postId)
+  const posts = read(POSTS_KEY, [])
+  const post = posts.find((p) => p.id === postId)
+  if (post) post.deleted_at = nowISO() // 软删除：仅打标记，保留数据
   write(POSTS_KEY, posts)
-  let likes = read(LIKES_KEY, [])
-  likes = likes.filter((l) => l.post_id !== postId)
-  write(LIKES_KEY, likes)
   return { error: null }
 }
 
@@ -350,9 +377,9 @@ export async function clearPosts() {
     await request('/posts', { method: 'DELETE' })
     return { error: null }
   }
-  localStorage.removeItem(POSTS_KEY)
-  localStorage.removeItem(LIKES_KEY)
-  localStorage.removeItem(COMMENTS_KEY)
+  const posts = read(POSTS_KEY, [])
+  posts.forEach((p) => { if (!p.deleted_at) p.deleted_at = nowISO() }) // 软删除：仅打标记
+  write(POSTS_KEY, posts)
   return { error: null }
 }
 
@@ -363,14 +390,31 @@ export async function toggleLike(postId, userId, isLiked) {
     return { error: null }
   }
   const likes = read(LIKES_KEY, [])
-  if (isLiked) {
-    const next = likes.filter((l) => !(l.post_id === postId && l.user_id === userId))
-    write(LIKES_KEY, next)
+  const existing = likes.find((l) => l.post_id === postId && l.user_id === userId)
+  if (existing && !existing.deleted_at) {
+    existing.deleted_at = nowISO() // 取消赞：软删除（再赞可恢复）
+  } else if (existing && existing.deleted_at) {
+    delete existing.deleted_at // 重新点赞：恢复该条记录
+    const obj = readPet()
+    const key = userId + ':' + postId
+    if (!obj.rewardedLikes.includes(key)) {
+      obj.rewardedLikes.push(key)
+      awardPetCoins('like')
+    }
+    writePet(obj)
   } else {
     likes.push({ id: uid(), post_id: postId, user_id: userId })
     write(LIKES_KEY, likes)
-    awardPetCoins('like')
+    // 同一用户对同一动态仅首次点赞发币一次，避免反复点赞/取消刷币
+    const obj = readPet()
+    const key = userId + ':' + postId
+    if (!obj.rewardedLikes.includes(key)) {
+      obj.rewardedLikes.push(key)
+      awardPetCoins('like')
+    }
+    writePet(obj)
   }
+  write(LIKES_KEY, likes)
   return { error: null }
 }
 
@@ -393,7 +437,8 @@ export async function deleteComment(commentId) {
     return { error: null }
   }
   let comments = read(COMMENTS_KEY, [])
-  comments = comments.filter((c) => c.id !== commentId)
+  const c = comments.find((x) => x.id === commentId)
+  if (c) c.deleted_at = nowISO() // 软删除：仅打标记，保留数据
   write(COMMENTS_KEY, comments)
   return { error: null }
 }

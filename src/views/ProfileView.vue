@@ -50,24 +50,34 @@
       <div class="profile-menu-item" @click="switchAccount">
         <span>🔄</span> 切换身份 <span class="arrow">›</span>
       </div>
-      <div class="profile-menu-item" @click="handleClear">
-        <span>🧹</span> 清空动态 <span class="arrow">›</span>
-      </div>
-      <div class="profile-menu-item">
+      <div class="profile-menu-item" @click="showAbout = true">
         <span>ℹ️</span> 关于 <span class="arrow">›</span>
       </div>
     </div>
 
     <button class="profile-logout" @click="handleLogout">退出登录</button>
+
+    <div v-if="showAbout" class="about-mask" @click.self="showAbout = false">
+      <div class="about-card">
+        <div class="about-emoji">💖</div>
+        <div class="about-title">关于</div>
+        <div class="about-text">
+          开发者：<strong>刘业磊</strong>
+        </div>
+        <div class="about-text about-sub">用于记录和可可的美好瞬间</div>
+        <button class="about-close" @click="showAbout = false">好的</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { store } from '../store'
 
 const router = useRouter()
+const showAbout = ref(false)
 
 const initial = computed(() => store.state.profile?.name?.charAt(0)?.toUpperCase() || '?')
 
@@ -82,13 +92,6 @@ onMounted(() => store.loadPosts())
 function switchAccount() {
   store.logout()
   router.push('/login')
-}
-
-async function handleClear() {
-  if (confirm('确定清空所有动态和赞吗？（不会退出登录）')) {
-    await store.clearPosts()
-    alert('已清空动态数据')
-  }
 }
 
 function handleLogout() {
@@ -164,4 +167,23 @@ function handleLogout() {
   transition: background 0.15s;
 }
 .profile-logout:active { background: var(--primary-soft); }
+
+.about-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  padding: var(--sp-5);
+}
+.about-card {
+  background: var(--surface); border-radius: var(--radius-lg); padding: 28px 24px;
+  text-align: center; max-width: 320px; width: 100%; box-shadow: var(--shadow-md);
+}
+.about-emoji { font-size: 40px; margin-bottom: 8px; }
+.about-title { font-size: var(--fs-lg); font-weight: 700; color: var(--text); margin-bottom: 14px; }
+.about-text { font-size: var(--fs-base); color: var(--text); line-height: 1.7; }
+.about-text strong { color: var(--primary); }
+.about-sub { color: var(--text-secondary); margin-top: 4px; }
+.about-close {
+  margin-top: 20px; padding: 10px 40px; border: none; border-radius: var(--radius-pill);
+  background: var(--gradient); color: #fff; font-size: var(--fs-md); font-weight: 500; cursor: pointer;
+}
 </style>
