@@ -281,9 +281,11 @@ function buildPost(p) {
   return {
     ...p,
     profiles: { id: p.user_id, display_name: ACCOUNT_NAMES[p.user_id] || '用户', avatar_url: null },
-    likes: likes.filter((l) => l.post_id === p.id).map((l) => ({ id: l.id, user_id: l.user_id })),
+    likes: likes
+      .filter((l) => l.post_id === p.id && !l.deleted_at)
+      .map((l) => ({ id: l.id, user_id: l.user_id })),
     comments: comments
-      .filter((c) => c.post_id === p.id)
+      .filter((c) => c.post_id === p.id && !c.deleted_at)
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
       .map(buildComment),
   }
@@ -341,6 +343,7 @@ export async function getPosts() {
   }
   const posts = read(POSTS_KEY, [])
   return posts
+    .filter((p) => !p.deleted_at)
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .map(buildPost)
 }
@@ -362,12 +365,10 @@ export async function deletePost(postId) {
     await request('/posts/' + postId, { method: 'DELETE' })
     return { error: null }
   }
-  let posts = read(POSTS_KEY, [])
-  posts = posts.filter((p) => p.id !== postId)
+  const posts = read(POSTS_KEY, [])
+  const post = posts.find((p) => p.id === postId)
+  if (post) post.deleted_at = nowISO() // 软删除：仅打标记，保留数据
   write(POSTS_KEY, posts)
-  let likes = read(LIKES_KEY, [])
-  likes = likes.filter((l) => l.post_id !== postId)
-  write(LIKES_KEY, likes)
   return { error: null }
 }
 
@@ -376,9 +377,9 @@ export async function clearPosts() {
     await request('/posts', { method: 'DELETE' })
     return { error: null }
   }
-  localStorage.removeItem(POSTS_KEY)
-  localStorage.removeItem(LIKES_KEY)
-  localStorage.removeItem(COMMENTS_KEY)
+  const posts = read(POSTS_KEY, [])
+  posts.forEach((p) => { if (!p.deleted_at) p.deleted_at = nowISO() }) // 软删除：仅打标记
+  write(POSTS_KEY, posts)
   return { error: null }
 }
 
@@ -389,9 +390,18 @@ export async function toggleLike(postId, userId, isLiked) {
     return { error: null }
   }
   const likes = read(LIKES_KEY, [])
-  if (isLiked) {
-    const next = likes.filter((l) => !(l.post_id === postId && l.user_id === userId))
-    write(LIKES_KEY, next)
+  const existing = likes.find((l) => l.post_id === postId && l.user_id === userId)
+  if (existing && !existing.deleted_at) {
+    existing.deleted_at = nowISO() // 取消赞：软删除（再赞可恢复）
+  } else if (existing && existing.deleted_at) {
+    delete existing.deleted_at // 重新点赞：恢复该条记录
+    const obj = readPet()
+    const key = userId + ':' + postId
+    if (!obj.rewardedLikes.includes(key)) {
+      obj.rewardedLikes.push(key)
+      awardPetCoins('like')
+    }
+    writePet(obj)
   } else {
     likes.push({ id: uid(), post_id: postId, user_id: userId })
     write(LIKES_KEY, likes)
@@ -404,6 +414,7 @@ export async function toggleLike(postId, userId, isLiked) {
     }
     writePet(obj)
   }
+  write(LIKES_KEY, likes)
   return { error: null }
 }
 
@@ -426,7 +437,8 @@ export async function deleteComment(commentId) {
     return { error: null }
   }
   let comments = read(COMMENTS_KEY, [])
-  comments = comments.filter((c) => c.id !== commentId)
+  const c = comments.find((x) => x.id === commentId)
+  if (c) c.deleted_at = nowISO() // 软删除：仅打标记，保留数据
   write(COMMENTS_KEY, comments)
   return { error: null }
 }

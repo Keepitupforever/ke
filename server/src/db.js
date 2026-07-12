@@ -5,7 +5,10 @@ import { fileURLToPath } from 'url'
 import { KEY } from './crypto.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = path.resolve(__dirname, '..', 'data')
+// 生产库默认在 server/data；测试时通过 KE_DATA_DIR 指向独立目录，永不触碰生产库
+const DATA_DIR = process.env.KE_DATA_DIR
+  ? path.resolve(process.env.KE_DATA_DIR)
+  : path.resolve(__dirname, '..', 'data')
 fs.mkdirSync(DATA_DIR, { recursive: true })
 
 const DB_FILE = path.join(DATA_DIR, 'db.json.enc') // 加密后的数据存储
