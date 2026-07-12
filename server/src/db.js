@@ -33,7 +33,7 @@ function decrypt(str) {
 }
 
 // ---------- 内存状态 ----------
-const state = { users: [], posts: [], post_images: [], likes: [], comments: [], sessions: [], pets: [], pet: null, wallet: null }
+const state = { users: [], posts: [], post_images: [], likes: [], comments: [], sessions: [], pets: [], pet: null, wallet: null, rewardedLikes: [] }
 
 function assign(parsed) {
   for (const k of Object.keys(state)) {

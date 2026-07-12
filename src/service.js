@@ -87,10 +87,11 @@ function migratePet(obj) {
     delete obj.pet
   }
   if (!obj.wallet) obj.wallet = defaultWallet()
+  if (!Array.isArray(obj.rewardedLikes)) obj.rewardedLikes = []
   return obj
 }
 function readPet() {
-  const obj = read(PET_KEY, { wallet: defaultWallet(), pets: [] })
+  const obj = read(PET_KEY, { wallet: defaultWallet(), pets: [], rewardedLikes: [] })
   migratePet(obj)
   return obj
 }
@@ -394,7 +395,14 @@ export async function toggleLike(postId, userId, isLiked) {
   } else {
     likes.push({ id: uid(), post_id: postId, user_id: userId })
     write(LIKES_KEY, likes)
-    awardPetCoins('like')
+    // 同一用户对同一动态仅首次点赞发币一次，避免反复点赞/取消刷币
+    const obj = readPet()
+    const key = userId + ':' + postId
+    if (!obj.rewardedLikes.includes(key)) {
+      obj.rewardedLikes.push(key)
+      awardPetCoins('like')
+    }
+    writePet(obj)
   }
   return { error: null }
 }

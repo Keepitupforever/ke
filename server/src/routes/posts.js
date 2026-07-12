@@ -97,7 +97,13 @@ router.post('/:id/like', authMiddleware, (req, res) => {
       created_at: new Date().toISOString(),
     })
     liked = true
-    awardCoins('like')
+    // 同一用户对同一动态仅首次点赞发币一次，避免反复点赞/取消刷币
+    const key = req.user.id + ':' + req.params.id
+    if (!Array.isArray(db.rewardedLikes)) db.rewardedLikes = []
+    if (!db.rewardedLikes.includes(key)) {
+      db.rewardedLikes.push(key)
+      awardCoins('like')
+    }
   }
   db.persist()
 
