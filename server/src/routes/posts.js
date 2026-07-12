@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import db from '../db.js'
 import { authMiddleware } from '../auth.js'
+import { awardCoins } from '../pets.js'
 
 const router = Router()
 
@@ -63,6 +64,7 @@ router.post('/', authMiddleware, (req, res) => {
     db.post_images.push({ id: db.uid(), post_id: id, url, sort_order: i })
   )
   db.persist()
+  awardCoins('post')
   res.json({ post: buildPost(getPost(id)) })
 })
 
@@ -95,6 +97,7 @@ router.post('/:id/like', authMiddleware, (req, res) => {
       created_at: new Date().toISOString(),
     })
     liked = true
+    awardCoins('like')
   }
   db.persist()
 
@@ -119,6 +122,7 @@ router.post('/:id/comments', authMiddleware, (req, res) => {
     created_at: new Date().toISOString(),
   })
   db.persist()
+  awardCoins('comment')
 
   const c = db.comments.find((x) => x.id === id)
   const cu = db.users.find((u) => u.id === c.user_id)

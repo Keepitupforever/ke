@@ -5,13 +5,23 @@ import { authMiddleware } from '../auth.js'
 
 const router = Router()
 
-// 登录：选择身份即可（无密码，符合"仅两人"的小世界场景）
+// 两个固定账号的登录口令（仅两人使用的小世界场景，明文存放于此）
+const ACCOUNT_PASSWORDS = {
+  me: 'kkll20010128', // 刘业磊
+  wife: 'kkll19991224', // 任可
+}
+
+// 登录：选择身份 + 输入对应口令
 router.post('/login', (req, res) => {
-  const { userId } = req.body || {}
+  const { userId, password } = req.body || {}
   if (!userId) return res.status(400).json({ error: { message: '缺少 userId' } })
 
   const user = db.users.find((u) => u.id === userId)
   if (!user) return res.status(404).json({ error: { message: '用户不存在' } })
+
+  if (!password || password !== ACCOUNT_PASSWORDS[userId]) {
+    return res.status(401).json({ error: { message: '口令错误' } })
+  }
 
   const token = crypto.randomBytes(24).toString('hex')
   db.sessions.push({ token: hashToken(token), user_id: user.id, created_at: new Date().toISOString() })

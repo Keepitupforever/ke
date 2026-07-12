@@ -6,6 +6,7 @@ const routes = [
   { path: '/feed', name: 'feed', component: () => import('./views/FeedView.vue'), meta: { auth: true } },
   { path: '/create', name: 'create', component: () => import('./views/CreateView.vue'), meta: { auth: true } },
   { path: '/profile', name: 'profile', component: () => import('./views/ProfileView.vue'), meta: { auth: true } },
+  { path: '/pet', name: 'pet', component: () => import('./views/PetView.vue'), meta: { auth: true } },
 ]
 
 const router = createRouter({

@@ -7,6 +7,7 @@ import './db.js'
 import authRoutes from './routes/auth.js'
 import postRoutes from './routes/posts.js'
 import uploadRoutes from './routes/upload.js'
+import petRoutes from './routes/pets.js'
 import { decryptBuffer } from './crypto.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -54,6 +55,7 @@ app.get('/uploads/:name', (req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/posts', postRoutes)
 app.use('/api/upload', uploadRoutes)
+app.use('/api/pets', petRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 

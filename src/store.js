@@ -16,6 +16,9 @@ const state = reactive({
   loading: true,
   posts: [],
   theme: 'auto', // auto | light | dark
+  wallet: { coins: 0, inventory: { carrot: 0, bone: 0, fish: 0, kibble: 0 }, lastDailyDate: null },
+  pet: null, // { type, name, satiety, water, mood, health, ... }
+  petLoaded: false,
 })
 
 // ---------- 主题 ----------
@@ -76,15 +79,22 @@ function loadSession() {
   }
 }
 
-async function loginAs(accountId) {
+async function loginAs(accountId, password) {
   const account = ACCOUNTS.find((a) => a.id === accountId)
   if (!account) return
   if (api.apiMode) {
-    const { data } = await api.login(account.id)
+    const { data } = await api.login(account.id, password)
     if (data?.token && data?.user) setUser(data.user, data.token)
   } else {
-    api.login(account.id)
+    await api.login(account.id, password)
     setUser(account)
+  }
+  // 登录后加载宠物并领取当日粮食币
+  try {
+    await loadPet()
+    await claimDaily()
+  } catch {
+    /* ignore */
   }
 }
 
@@ -107,6 +117,7 @@ async function createPost(content, images = []) {
     const { error } = await api.createPost(state.user.id, content, images)
     if (error) return { error }
     await loadPosts()
+    await loadPet()
     return { error: null }
   } catch (e) {
     return { error: { message: '发布失败：' + (e?.message || '') } }
@@ -133,6 +144,7 @@ async function toggleLike(post) {
   const liked = post.likes.some((l) => l.user_id === state.user.id)
   await api.toggleLike(post.id, state.user.id, liked)
   await loadPosts()
+  await loadPet()
 }
 
 async function addComment(post, content) {
@@ -141,6 +153,7 @@ async function addComment(post, content) {
   if (!text) return
   await api.createComment(post.id, state.user.id, text)
   await loadPosts()
+  await loadPet()
 }
 
 export const store = {
@@ -159,4 +172,59 @@ export const store = {
   addComment,
   setTheme,
   applyTheme,
+  loadPet,
+  adoptPet,
+  feedPet,
+  waterPet,
+  buyFood,
+  claimDaily,
+}
+
+// ---------- 宠物 / 粮食币 ----------
+async function loadPet() {
+  try {
+    const data = await api.getPetState()
+    if (data?.wallet) state.wallet = data.wallet
+    if (data?.pet) state.pet = data.pet
+    else state.pet = null
+  } catch {
+    /* ignore */
+  } finally {
+    state.petLoaded = true
+  }
+}
+
+async function adoptPet(type, name) {
+  const data = await api.adoptPet(type, name)
+  if (data?.wallet) state.wallet = data.wallet
+  if (data?.pet) state.pet = data.pet
+  return data
+}
+
+async function feedPet(foodId) {
+  const data = await api.feedPet(foodId)
+  if (data?.wallet) state.wallet = data.wallet
+  if (data?.pet) state.pet = data.pet
+  return data
+}
+
+async function waterPet() {
+  const data = await api.waterPet()
+  if (data?.wallet) state.wallet = data.wallet
+  if (data?.pet) state.pet = data.pet
+  return data
+}
+
+async function buyFood(foodId, qty = 1) {
+  const data = await api.buyFood(foodId, qty)
+  if (data?.wallet) state.wallet = data.wallet
+  if (data?.pet) state.pet = data.pet
+  return data
+}
+
+// 领取当日粮食币（每天登录一次）
+async function claimDaily() {
+  const data = await api.claimDailyCoins()
+  if (data?.wallet) state.wallet = data.wallet
+  return data
 }
