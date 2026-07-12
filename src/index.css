@@ -1,0 +1,139 @@
+/* ============ 设计令牌（Design Tokens） ============ */
+:root {
+  /* 品牌色 */
+  --primary: #FF6B8A;
+  --primary-dark: #FF4770;
+  --primary-light: #FFB3C1;
+  --primary-soft: #FFEAF0;
+  --gradient: linear-gradient(135deg, #FF6B8A, #FF8E9E);
+  --gradient-strong: linear-gradient(135deg, #FF6B8A, #FF4770);
+
+  /* 中性色（浅色主题） */
+  --bg: #F2F3F5;
+  --surface: #FFFFFF;
+  --surface-2: #F6F7F8;
+  --surface-hover: #F0F1F2;
+  --text: #1A1A1A;
+  --text-secondary: #6B7280;
+  --text-tertiary: #9CA3AF;
+  --border: #ECEDEF;
+  --border-strong: #E2E3E6;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --shadow-fab: 0 6px 20px rgba(255, 107, 138, 0.35);
+  --on-primary: #FFFFFF;
+  --on-primary-disabled: #C98A98;
+  --overlay: rgba(0, 0, 0, 0.5);
+
+  /* 布局比例 */
+  --app-max-width: 500px;
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* 等比字号（随视口缩放，移动端友好） */
+  --fs-xs: clamp(11px, 3vw, 12px);
+  --fs-sm: clamp(12px, 3.4vw, 13px);
+  --fs-base: clamp(14px, 3.8vw, 15px);
+  --fs-md: clamp(15px, 4vw, 16px);
+  --fs-lg: clamp(17px, 4.6vw, 18px);
+  --fs-xl: clamp(20px, 5.6vw, 23px);
+  --fs-title: clamp(22px, 6vw, 26px);
+
+  /* 间距比例 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  /* 安全区（刘海屏 / 手势条） */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: light;
+}
+
+/* ============ 暗黑主题 ============ */
+:root[data-theme='dark'] {
+  --bg: #0D0D0F;
+  --surface: #1A1B1E;
+  --surface-2: #232428;
+  --surface-hover: #2A2B30;
+  --text: #ECECEC;
+  --text-secondary: #9BA0A8;
+  --text-tertiary: #6B7078;
+  --border: #2A2B30;
+  --border-strong: #34363C;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.6);
+  --primary-soft: #3A2029;
+  --on-primary-disabled: #8A6A72;
+  --overlay: rgba(0, 0, 0, 0.65);
+
+  color-scheme: dark;
+}
+
+/* ============ 基础重置 ============ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 桌面端：居中展示，模拟手机卡片；移动端全屏 */
+#app {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@media (min-width: 600px) {
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 24px 16px;
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(255, 107, 138, 0.12), transparent 60%),
+      var(--bg);
+  }
+  #app {
+    width: 100%;
+    max-width: var(--app-max-width);
+    min-height: calc(100vh - 48px);
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    background: var(--surface);
+  }
+}
+
+input, textarea, button, select {
+  font-family: inherit;
+  outline: none;
+  color: inherit;
+}
+
+button { -webkit-tap-highlight-color: transparent; }
+
+a { color: inherit; text-decoration: none; }
+
+img { display: block; max-width: 100%; }
+
+/* 自定义滚动条（桌面端更精致） */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }

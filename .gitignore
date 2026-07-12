@@ -1,0 +1,22 @@
+# 依赖
+node_modules/
+server/node_modules/
+
+# 构建产物
+dist/
+server/dist/
+
+# 运行时日志
+*.log
+*.err
+server.log
+server.err
+dev.err
+
+# 密钥与本地数据（请勿入库：.secret 是图片/数据的加密密钥，泄露即等同于明文）
+data/.secret
+data/db.json.enc
+data/db.json
+
+# 上传的加密图片（量大，可由数据重建，不入库）
+server/uploads/

@@ -1,0 +1,9 @@
+node_modules/
+data/
+uploads/
+.env
+start.log
+start.err
+*.db
+*.db-wal
+*.db-shm
