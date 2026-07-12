@@ -33,11 +33,16 @@ function decrypt(str) {
 }
 
 // ---------- 内存状态 ----------
-const state = { users: [], posts: [], post_images: [], likes: [], comments: [], sessions: [] }
+const state = { users: [], posts: [], post_images: [], likes: [], comments: [], sessions: [], pet: null, wallet: null }
 
 function assign(parsed) {
   for (const k of Object.keys(state)) {
-    if (Array.isArray(parsed[k])) state[k] = parsed[k]
+    if (Array.isArray(state[k])) {
+      if (Array.isArray(parsed[k])) state[k] = parsed[k]
+    } else if (parsed[k] !== undefined) {
+      // pet / wallet 等非数组字段直接覆盖
+      state[k] = parsed[k]
+    }
   }
 }
 

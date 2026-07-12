@@ -13,6 +13,10 @@
         <span class="tab-icon">{{ isFeed ? '💕' : '🤍' }}</span>
         <span class="tab-label">朋友圈</span>
       </router-link>
+      <router-link to="/pet" class="tab-item" :class="{ active: isPet }">
+        <span class="tab-icon">🐾</span>
+        <span class="tab-label">宠物</span>
+      </router-link>
       <router-link to="/profile" class="tab-item" :class="{ active: isProfile }">
         <span class="tab-icon">👤</span>
         <span class="tab-label">我的</span>
@@ -28,8 +32,9 @@ import { store } from './store'
 
 const route = useRoute()
 const isFeed = computed(() => route.name === 'feed')
+const isPet = computed(() => route.name === 'pet')
 const isProfile = computed(() => route.name === 'profile')
-const showTabBar = computed(() => store.isAuthenticated.value && (isFeed.value || isProfile.value))
+const showTabBar = computed(() => store.isAuthenticated.value && (isFeed.value || isPet.value || isProfile.value))
 
 onMounted(() => store.loadSession())
 </script>

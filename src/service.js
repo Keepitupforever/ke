@@ -12,10 +12,188 @@ const LIKES_KEY = 'moments_likes'
 const COMMENTS_KEY = 'moments_comments'
 
 const DEMO_ACCOUNTS = [
-  { id: 'me', name: '刘业磊', email: 'me@us.com' },
-  { id: 'wife', name: '任可', email: 'wife@us.com' },
+  { id: 'me', name: '刘业磊', email: 'me@us.com', password: 'kkll20010128' },
+  { id: 'wife', name: '任可', email: 'wife@us.com', password: 'kkll19991224' },
 ]
 const ACCOUNT_NAMES = { me: '刘业磊', wife: '任可' }
+
+// 我们在一起的起点（用于首页展示相恋时长）
+export const TOGETHER_SINCE = '2026-07-05T00:00:00'
+
+// ================= 宠物 =================
+// 可领养的宠物类型（动态表情）
+export const PET_TYPES = [
+  { id: 'rabbit', name: '兔子', emoji: '🐰' },
+  { id: 'penguin', name: '企鹅', emoji: '🐧' },
+  { id: 'dog', name: '小狗', emoji: '🐶' },
+]
+
+// 粮食种类：不同种类要求（价格 / 恢复效果）不一样，且各有偏好的宠物
+export const FOODS = [
+  { id: 'carrot', name: '胡萝卜', emoji: '🥕', cost: 5, satiety: 22, mood: 6, preferred: 'rabbit' },
+  { id: 'bone', name: '骨头', emoji: '🦴', cost: 8, satiety: 32, mood: 10, preferred: 'dog' },
+  { id: 'fish', name: '小鱼干', emoji: '🐟', cost: 6, satiety: 26, mood: 8, preferred: 'penguin' },
+  { id: 'kibble', name: '通用粮', emoji: '🍚', cost: 4, satiety: 16, mood: 3, preferred: null },
+]
+
+// 粮食币获取规则
+export const COIN_RULES = { daily: 10, post: 5, like: 1, comment: 2 }
+
+// 生命体征含义
+export const VITALS = [
+  { key: 'satiety', label: '饱食', emoji: '🍖' },
+  { key: 'water', label: '水分', emoji: '💧' },
+  { key: 'mood', label: '心情', emoji: '😊' },
+  { key: 'health', label: '健康', emoji: '❤️' },
+]
+
+function pad2(n) {
+  return String(n).padStart(2, '0')
+}
+function todayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+function clamp(v, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, v))
+}
+function defaultWallet() {
+  return {
+    coins: 0,
+    inventory: { carrot: 0, bone: 0, fish: 0, kibble: 0 },
+    lastDailyDate: null,
+  }
+}
+
+// 根据经过的真实时间衰减生命体征（按小时线性衰减）
+export function applyPetDecay(pet, nowMs) {
+  const last = pet.lastDecayAt ? new Date(pet.lastDecayAt).getTime() : nowMs
+  const hours = Math.max(0, (nowMs - last) / 3600000)
+  if (hours <= 0) return
+  pet.satiety = clamp(pet.satiety - 3 * hours)
+  pet.water = clamp(pet.water - 4 * hours)
+  pet.mood = clamp(pet.mood - 2 * hours)
+  const low = pet.satiety < 15 || pet.water < 15
+  pet.health = clamp(pet.health + (low ? -2 : 1) * hours)
+  pet.lastDecayAt = new Date(nowMs).toISOString()
+}
+
+const PET_KEY = 'moments_pet'
+function readPet() {
+  return read(PET_KEY, { wallet: defaultWallet(), pet: null })
+}
+function writePet(obj) {
+  write(PET_KEY, obj)
+}
+function awardPetCoins(reason) {
+  const amount = COIN_RULES[reason]
+  if (!amount) return
+  const obj = readPet()
+  obj.wallet.coins += amount
+  writePet(obj)
+}
+
+// ---------- 宠物 API（演示模式 + 真实后端）----------
+export async function getPetState() {
+  if (apiMode) {
+    const data = await request('/pets')
+    return data
+  }
+  const obj = readPet()
+  if (obj.pet) applyPetDecay(obj.pet, Date.now())
+  writePet(obj)
+  return obj
+}
+
+export async function adoptPet(type, name) {
+  if (apiMode) {
+    return request('/pets/adopt', { method: 'POST', body: { type, name } })
+  }
+  const obj = readPet()
+  if (obj.pet) throw new Error('已经养了宠物啦')
+  obj.pet = {
+    type,
+    name: (name || '').trim() || '宝贝',
+    satiety: 80,
+    water: 80,
+    mood: 80,
+    health: 80,
+    adoptedAt: new Date().toISOString(),
+    lastDecayAt: new Date().toISOString(),
+    lastWateredAt: null,
+  }
+  writePet(obj)
+  return obj
+}
+
+export async function feedPet(foodId) {
+  if (apiMode) {
+    return request('/pets/feed', { method: 'POST', body: { food: foodId } })
+  }
+  const obj = readPet()
+  if (!obj.pet) throw new Error('还没有宠物')
+  const inv = obj.wallet.inventory
+  if (!inv[foodId] || inv[foodId] <= 0) throw new Error('该粮食库存不足，先去兑换吧')
+  const food = FOODS.find((f) => f.id === foodId)
+  if (!food) throw new Error('未知粮食')
+  applyPetDecay(obj.pet, Date.now())
+  let satiety = food.satiety
+  let mood = food.mood
+  // 投其所好：喂偏好粮食效果翻倍并额外加分
+  if (food.preferred === obj.pet.type) {
+    satiety *= 1.5
+    mood += 4
+  }
+  obj.pet.satiety = clamp(obj.pet.satiety + satiety)
+  obj.pet.mood = clamp(obj.pet.mood + mood)
+  if (obj.pet.health < 40) obj.pet.health = clamp(obj.pet.health + 3)
+  inv[foodId] -= 1
+  writePet(obj)
+  return obj
+}
+
+export async function waterPet() {
+  if (apiMode) {
+    return request('/pets/water', { method: 'POST' })
+  }
+  const obj = readPet()
+  if (!obj.pet) throw new Error('还没有宠物')
+  applyPetDecay(obj.pet, Date.now())
+  obj.pet.water = clamp(obj.pet.water + 35)
+  obj.pet.lastWateredAt = new Date().toISOString()
+  writePet(obj)
+  return obj
+}
+
+export async function buyFood(foodId, qty = 1) {
+  if (apiMode) {
+    return request('/pets/buy', { method: 'POST', body: { food: foodId, qty } })
+  }
+  const obj = readPet()
+  const food = FOODS.find((f) => f.id === foodId)
+  if (!food) throw new Error('未知粮食')
+  const cost = food.cost * qty
+  if (obj.wallet.coins < cost) throw new Error('粮食币不足')
+  obj.wallet.coins -= cost
+  obj.wallet.inventory[foodId] = (obj.wallet.inventory[foodId] || 0) + qty
+  writePet(obj)
+  return obj
+}
+
+export async function claimDailyCoins() {
+  if (apiMode) {
+    return request('/pets/daily', { method: 'POST' })
+  }
+  const obj = readPet()
+  const today = todayStr()
+  if (obj.wallet.lastDailyDate === today) {
+    return { wallet: obj.wallet, claimed: false }
+  }
+  obj.wallet.coins += COIN_RULES.daily
+  obj.wallet.lastDailyDate = today
+  writePet(obj)
+  return { wallet: obj.wallet, claimed: true, amount: COIN_RULES.daily }
+}
 
 // ---------- localStorage 工具（演示模式）----------
 function read(key, fallback) {
@@ -91,13 +269,17 @@ export function getSession() {
   return read(SESSION_KEY, null)
 }
 
-export async function login(userId) {
+export async function login(userId, password) {
   if (apiMode) {
-    const data = await request('/auth/login', { method: 'POST', body: { userId }, auth: false })
+    const data = await request('/auth/login', { method: 'POST', body: { userId, password }, auth: false })
     if (data?.token) localStorage.setItem(TOKEN_KEY, data.token)
     return { data }
   }
+  // 演示模式：本地校验口令
   const account = DEMO_ACCOUNTS.find((a) => a.id === userId)
+  if (!account || account.password !== password) {
+    throw new Error('口令错误')
+  }
   if (account) write(SESSION_KEY, { user: { id: account.id, name: account.name, email: account.email } })
   return { data: { user: account } }
 }
@@ -145,6 +327,7 @@ export async function createPost(userId, content, images = []) {
   const posts = read(POSTS_KEY, [])
   posts.push({ id: uid(), user_id: userId, content, images, created_at: nowISO() })
   write(POSTS_KEY, posts)
+  awardPetCoins('post')
   return { error: null }
 }
 
@@ -186,6 +369,7 @@ export async function toggleLike(postId, userId, isLiked) {
   } else {
     likes.push({ id: uid(), post_id: postId, user_id: userId })
     write(LIKES_KEY, likes)
+    awardPetCoins('like')
   }
   return { error: null }
 }
@@ -199,6 +383,7 @@ export async function createComment(postId, userId, content) {
   const comments = read(COMMENTS_KEY, [])
   comments.push({ id: uid(), post_id: postId, user_id: userId, content, created_at: nowISO() })
   write(COMMENTS_KEY, comments)
+  awardPetCoins('comment')
   return { error: null }
 }
 

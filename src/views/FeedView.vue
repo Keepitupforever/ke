@@ -13,6 +13,14 @@
       <span>{{ refreshing ? '刷新中...' : pullDistance > 50 ? '松手刷新' : '下拉刷新' }}</span>
     </div>
 
+    <div class="together-banner">
+      <div class="together-label">💞 我们已经在一起</div>
+      <div class="together-main">{{ togetherText }}</div>
+      <div class="together-sub">
+        自 {{ sinceLabel }} 起 · 已携手 {{ together.totalDays }} 天 {{ pad(together.h) }}:{{ pad(together.m) }}:{{ pad(together.s) }}
+      </div>
+    </div>
+
     <div class="feed-header">
       <div>
         <div class="feed-header-title">我们的朋友圈</div>
@@ -51,7 +59,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { store } from '../store'
 import * as api from '../service'
@@ -59,6 +67,56 @@ import PostCard from '../components/PostCard.vue'
 
 const router = useRouter()
 const feedEl = ref(null)
+
+// ---------- 在一起时间（自 2026-07-05 起，实时刷新） ----------
+const SINCE = new Date(api.TOGETHER_SINCE)
+const sinceLabel = api.TOGETHER_SINCE.slice(0, 10)
+const together = ref(computeTogether())
+
+function pad(n) {
+  return String(n).padStart(2, '0')
+}
+function computeTogether() {
+  const now = new Date()
+  const diffMs = Math.max(0, now - SINCE)
+  const totalSeconds = Math.floor(diffMs / 1000)
+  // 算上第一天：在一起天数 = 已过整天数 + 1
+  const totalDays = Math.floor(totalSeconds / 86400) + 1
+  let years = now.getFullYear() - SINCE.getFullYear()
+  let months = now.getMonth() - SINCE.getMonth()
+  let days = now.getDate() - SINCE.getDate()
+  if (days < 0) {
+    months--
+    const prev = new Date(now.getFullYear(), now.getMonth(), 0)
+    days += prev.getDate()
+  }
+  if (months < 0) {
+    years--
+    months += 12
+  }
+  // 算上第一天：日期部分 +1，并处理跨月进位
+  days += 1
+  const daysInSinceMonth = new Date(SINCE.getFullYear(), SINCE.getMonth() + 1, 0).getDate()
+  if (days > daysInSinceMonth) {
+    days -= daysInSinceMonth
+    months += 1
+    if (months > 11) {
+      months -= 12
+      years += 1
+    }
+  }
+  const h = Math.floor((totalSeconds % 86400) / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = totalSeconds % 60
+  return { years, months, days, h, m, s, totalDays }
+}
+const togetherText = computed(() => {
+  const { years, months, days } = together.value
+  if (years > 0) return `${years} 年 ${months} 个月 ${days} 天`
+  if (months > 0) return `${months} 个月 ${days} 天`
+  return `${days} 天`
+})
+let ticker = null
 
 const refreshing = ref(false)
 const pullDistance = ref(0)
@@ -90,7 +148,15 @@ async function doRefresh() {
   }
 }
 
-onMounted(() => store.loadPosts())
+onMounted(() => {
+  store.loadPosts()
+  ticker = setInterval(() => {
+    together.value = computeTogether()
+  }, 1000)
+})
+onUnmounted(() => {
+  if (ticker) clearInterval(ticker)
+})
 function goCreate() { router.push('/create') }
 function onComment({ post, content }) { store.addComment(post, content) }
 async function onDeleteComment(commentId) { await store.deleteComment(commentId) }
@@ -153,6 +219,17 @@ async function onDeleteComment(commentId) { await store.deleteComment(commentId)
 }
 .feed-fab:active { transform: scale(0.92); }
 .feed-fab span { margin-top: -2px; }
+
+.together-banner {
+  background: linear-gradient(135deg, #FF8E9E, #FFB3C1);
+  padding: 22px 20px 18px; text-align: center; color: #fff;
+}
+.together-label { font-size: 14px; opacity: 0.9; }
+.together-main {
+  font-size: 24px; font-weight: 700; margin-top: 6px; letter-spacing: 0.5px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.together-sub { font-size: 13px; opacity: 0.85; margin-top: 6px; font-variant-numeric: tabular-nums; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
