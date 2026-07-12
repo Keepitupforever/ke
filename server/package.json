@@ -3,12 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "仅你我可见 - 后端服务（Express，加密 SQLite 存储，纯 WASM 零原生依赖）",
+  "description": "仅你我可见 - 后端服务（Express，独立 better-sqlite3 进程 + 加密 SQLite，原生零 WASM 依赖）",
   "scripts": {
+    "start:db": "node src/db-server.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },
   "dependencies": {
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "multer": "^1.4.5-lts.1",
